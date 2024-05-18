@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<title>Base64 Viewer - PDF, PNG, JPG/JPEG, etc.</title>
+	<meta name="description" content="Simple page that allows you to view Base64-encoded files (PDF, PNG, JPG/JPEG, etc.) in the browser. Nothing is sent to the server, preserving data confidentiality.">
+	<style>
+		*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+		html, body {
+			min-width: 100%;
+			min-height: 100vh;
+			display: flex;
+			flex-direction: column;
+		}
+
+		:root {
+			/* This is so that the font and padding is not too big on mobile phones */
+			--padding: calc(1.275rem + 0.3vw);
+			--font-size: calc(1.325rem + 0.9vw);
+		}
+
+		@media (min-width: 1200px) {
+			:root {
+				--padding: 1.5rem;
+				--font-size: 2rem;
+			}
+		}
+
+		body > *:not(#disclaimer) {
+			flex: 1 1 100%;
+			object-fit: contain;
+			object-position: top;
+		}
+		
+		#disclaimer,
+		body.rendered #form {
+			display: none;
+		}
+
+		#disclaimer {
+			justify-content: space-between;
+			align-items: center;
+			gap: 1rem;
+			line-height: 1.25;
+			margin: 0 auto;
+			width: 100%;
+			padding: calc(var(--padding) / 2) var(--padding);
+		}
+
+		body.rendered #disclaimer { display: flex; }
+
+		#form {
+			display: flex;
+			flex-direction: column;
+			font-size: var(--font-size);
+			gap: calc(var(--padding) / 2);
+			padding: calc(var(--padding) / 2) var(--padding);
+		}
+
+		#form header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		#form label { line-height: 1; }
+
+		#form textarea {
+			flex: 1 1 100%;
+			border: 2px solid #3d8bfd;
+			border-radius: 1rem;
+			padding: 1rem;
+			resize: none;
+		}
+
+		/* Based on styles from Bootstrap 5.3 */
+		button {
+			--shadow-rgb: 0, 0, 0, 0;
+			cursor: pointer;
+			border-radius: 0.375rem;
+			padding: 0.375rem 0.75rem;
+			font-size: 1.25rem;
+			user-select: none;
+			color: #fff;
+			background-color: #198754;
+			border: 1px solid #198754;
+			box-shadow: 0 0 0 0.25rem rgba(var(--shadow-rgb));
+			transition: all .15s ease;
+		}
+
+		button:hover {
+			background-color: #157347;
+			border-color: #146c43;
+		}
+
+		button:active {
+			--shadow-rgb: 60, 153, 110, .5;
+			background-color: #146c43;
+			border: 1px solid #13653f;
+		}
+	</style>
+	<script>
+	const renderers = {
+		application(url) {
+			const embed = document.createElement('embed');
+			embed.src = url;
+			return embed;
+		},
+		image(url) {
+			const img = document.createElement('img');
+			img.src = url;
+			return img;
+		},
+		video(url, { mediaType }) {
+			const video = document.createElement('video');
+			video.setAttribute('playsinline', '');
+			const source = document.createElement('source');
+			source.src = url;
+			source.type = mediaType;
+			video.appendChild(source);
+			return video;
+		},
+		audio(url) {
+			// Same as above
+			const source = document.createElement('source');
+			source.src = url;
+			source.type = mediaType;
+			return source;
+		},
+		text(_, { decodedContent }) {
+			const code = document.createElement('code');
+			const pre = document.createElement('pre');
+			code.appendChild(pre);
+			pre.innerText = decodedContent;
+			return code;
+		},
+	};
+
+	function parseDataUrl(data) {
+		const regex =
+			/data:(?<mediaType>\w+\/.+?)?(?<base64>;base64)?,(?<content>.+)$/s;
+
+		const result = regex.exec(data);
+
+		const isBase64 = !!result?.groups.base64;
+		const content = result?.groups.content ?? '';
+
+		return {
+			isBase64,
+			content,
+			mediaType: result?.groups.mediaType?.trim() ?? '',
+			// Decode the content differently if it's Base64-encoded
+			// When it's not Base64-encoded, asume the content is URL encoded
+			get decodedContent() {
+				return isBase64 ? atob(content) : decodeURIComponent(content);
+			}
+		};
+	}
+
+	function validateDataUrl({ mediaType, content, isBase64 }) {
+		const errors = [];
+		if (!mediaType) {
+			errors.push("The data URL doesn't contain a media type (e.g. 'application/pdf')");
+		}
+		if (!content) {
+			errors.push("The data URL doesn't have a content (e.g. 'data:(...),CONTENT...')");
+		}
+		if (!isBase64) {
+			errors.push('The content is not encoded with Base64');
+		}
+
+		// Show an alert only if there were errors
+		if (errors.length > 0) {
+			alert(`⚠️ The following may lead to unexpected results:\n- ${errors.join('\n- ')}`);
+		}
+	}
+
+	function getTypePrefix(mediaType) {
+		const regex = /(?<prefix>.+)\/.+$/;
+
+		// If the media type is e.g. 'image/png', this will return 'image'
+		return regex.exec(mediaType)?.groups.prefix;
+	}
+
+	function getRenderer(mediaType) {
+		const type = getTypePrefix(mediaType);
+
+		// If no renderer supports the media type, use the one for
+		// 'application/*', since that will show the content with an <embed>
+		return renderers[type] ?? renderers.application;
+	}
+
+	function reset() {
+		document.body.classList.remove('rendered');
+		document.querySelector('#result')?.remove();
+	}
+
+	function render(dataUrl) {
+		// Remove already rendered results if there's any, e.g. after pressing
+		// Ctrl + Enter multiple times
+		reset();
+
+		// Ensure the string is a data URL
+		// If the string is not a data URL, assume it's a Base64-encoded PDF
+		if (!dataUrl.startsWith('data:')) {
+			dataUrl = 'data:application/pdf;base64,' + dataUrl;
+		}
+
+		const parseResult = parseDataUrl(dataUrl);
+
+		// Render the result depending on the media type
+		const renderer = getRenderer(parseResult.mediaType);
+		const result = renderer(dataUrl, parseResult);
+		result.id = 'result';
+
+		// Hide the form and show the result
+		document.body.classList.add('rendered');
+		document.body.appendChild(result);
+
+		// Show an alert if there were errors
+		validateDataUrl(parseResult);
+	}
+
+	function hasTroublesomeChars(data) {
+		// Checks if it has chars that are not in the Base64 alphabet
+		return /^[^a-zA-Z0-9:/;,=]+$/.test(data);
+	}
+
+	window.addEventListener('DOMContentLoaded', () => {
+		const form = document.querySelector('#form');
+
+		// Fills the textarea with content from the URL
+		const initialData = new URL(window.location).searchParams.get('data')
+			// Browsers may treat plus symbols (+) as spaces, so we prevent that
+			// Note that this may not be desired by the user, hence the alert below
+			?.replace(/ /g, '+');
+		if (initialData) {
+			form['data'].value = initialData;
+
+			if (hasTroublesomeChars(initialData)) {
+				alert('⚠️ The data from the URL contains symbols that may lead to unexpected results. Consider entering the contents in the form again, otherwise the browser may get confused with some symbols (e.g. spaces, + or %).');
+			}
+		}
+
+		form.addEventListener('submit', e => {
+			e.preventDefault();
+			render(form['data'].value.trim());
+		});
+
+		const resetBtn = document.querySelector('#reset');
+		resetBtn.addEventListener('click', reset);
+
+		// For a multi-line placeholder with tabulation (\t)
+		// Note that this may not be compatible on Safari:
+		// https://developer.mozilla.org/en-US/docs/Web/HTML/Element/textarea#browser_compatibility
+		const textarea = form.querySelector('textarea');
+		textarea.placeholder = textarea.placeholder
+			.replace(/  /g, '\n')
+			.replace(/\\t/g, '\t');
+
+		// To allow the usage of keyboard shortcuts:
+		// - Ctrl + Enter: renders the content
+		// - Escape: returns to the form
+		document.addEventListener('keydown', function(event) {
+			if (event.ctrlKey && event.key === 'Enter') {
+				form['submit'].click();
+			} else if (event.key === 'Escape') {
+				reset();
+			}
+		});
+	});
+	</script>
+</head>
+<body title="Pro-tip: Use Ctrl + Enter and Escape for maximum productivity ;)">
+	<noscript>This page requires JavaScript to work, since everything is done in the browser.</noscript>
+	<form id="form" autocomplete="off">
+		<header>
+			<label for="textarea">Enter the Base64-encoded content:</label>
+			<button tabindex="2" name="submit">View content</button>
+		</header>
+		<textarea tabindex="1" autofocus required name="data" id="textarea" placeholder="Nothing will be sent to the server, preserving data confidentiality (you can confirm that in the source code of this page).    Examples (PDF):  - Base64 URL with media type:\t\tdata:application/pdf;base64,JVBERi0xLjQKJdPr6eE=  - Base64 URL without media type:\tdata:;base64,JVBERi0xLjQKJdPr6eE=  - Just the Base64 (no 'data:' prefix):\tJVBERi0xLjQKJdPr6eE=    Examples (images, text files, etc.):  - Image:\tdata:image/gif;base64,R0lGODlhAQABAPAAAAAA/wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==  - HTML:\t\tdata:text/html,%3Ch1%3EHello%2C%20World%21%3C%2Fh1%3E  - Plain text:\tdata:,Hello%2C%20World%21    Feel free to download this page! Simply press Ctrl + S (or Cmd + S on Mac) and put this file in an easy-to-reach place such as the Desktop or the Start menu."></textarea>
+	</form>
+	<p id="disclaimer">
+		<span><b>Disclaimer</b>: The content below is user-generated and is not hosted nor endorsed by me. No data was exchanged with the server: everything was processed in the web browser.</span>
+		<button tabindex="3" id="reset">Return to form</button>
+	</p>
+</body>
+</html>
