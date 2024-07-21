@@ -8,10 +8,10 @@ Simple page that allows you to view Base64-encoded files (PDF, PNG, JPG/JPEG, et
 
 - Multiple formats supported: PDF, PNG, JPG/JPEG, etc.
 - Keyboard shortcuts:
-    - Ctrl + Enter: renders the content of the Base64
-    - Escape: returns to the form 
+    - `Ctrl + Enter`: renders the content of the Base64
+    - `Escape`: returns to the form 
 - Instant render from the URL
-    - Pro-tip: add a shortcut in your browser so you can type in the search bar "base64 YOUR_BASE64_ENCODED_CONTENT"
+    - Pro-tip: add a shortcut in your browser so you can type in the search bar `base64 YOUR_BASE64_ENCODED_CONTENT`
 - Data confidentiality: nothing is ever sent to a server
 
 ## TODO
