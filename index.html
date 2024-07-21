@@ -228,11 +228,30 @@
 
 	function hasTroublesomeChars(data) {
 		// Checks if it has chars that are not in the Base64 alphabet
-		return /^[^a-zA-Z0-9:/;,=]+$/.test(data);
+		return /[^a-zA-Z0-9:;,=\/]/.test(data);
 	}
 
 	window.addEventListener('DOMContentLoaded', () => {
 		const form = document.querySelector('#form');
+
+		form.addEventListener('submit', e => {
+			e.preventDefault();
+			render(form['data'].value.trim());
+		});
+
+		const resetBtn = document.querySelector('#reset');
+		resetBtn.addEventListener('click', reset);
+
+		// To allow the usage of keyboard shortcuts:
+		// - Ctrl + Enter: renders the content
+		// - Escape: returns to the form
+		document.addEventListener('keydown', function(event) {
+			if (event.ctrlKey && event.key === 'Enter') {
+				form['view'].click();
+			} else if (event.key === 'Escape') {
+				reset();
+			}
+		});
 
 		// Fills the textarea with content from the URL
 		const initialData = new URL(window.location).searchParams.get('data')
@@ -244,16 +263,11 @@
 
 			if (hasTroublesomeChars(initialData)) {
 				alert('⚠️ The data from the URL contains symbols that may lead to unexpected results. Consider entering the contents in the form again, otherwise the browser may get confused with some symbols (e.g. spaces, + or %).');
+			} else {
+				// View the content immediately
+				form['view'].click();
 			}
 		}
-
-		form.addEventListener('submit', e => {
-			e.preventDefault();
-			render(form['data'].value.trim());
-		});
-
-		const resetBtn = document.querySelector('#reset');
-		resetBtn.addEventListener('click', reset);
 
 		// For a multi-line placeholder with tabulation (\t)
 		// Note that this may not be compatible on Safari:
@@ -262,17 +276,6 @@
 		textarea.placeholder = textarea.placeholder
 			.replace(/  /g, '\n')
 			.replace(/\\t/g, '\t');
-
-		// To allow the usage of keyboard shortcuts:
-		// - Ctrl + Enter: renders the content
-		// - Escape: returns to the form
-		document.addEventListener('keydown', function(event) {
-			if (event.ctrlKey && event.key === 'Enter') {
-				form['submit'].click();
-			} else if (event.key === 'Escape') {
-				reset();
-			}
-		});
 	});
 	</script>
 </head>
@@ -281,7 +284,7 @@
 	<form id="form" autocomplete="off">
 		<header>
 			<label for="textarea">Enter the Base64-encoded content:</label>
-			<button tabindex="2" name="submit">View content</button>
+			<button tabindex="2" name="view">View content</button>
 		</header>
 		<textarea tabindex="1" autofocus required name="data" id="textarea" placeholder="Nothing will be sent to the server, preserving data confidentiality (you can confirm that in the source code of this page).    Examples (PDF):  - Base64 URL with media type:\t\tdata:application/pdf;base64,JVBERi0xLjQKJdPr6eE=  - Base64 URL without media type:\tdata:;base64,JVBERi0xLjQKJdPr6eE=  - Just the Base64 (no 'data:' prefix):\tJVBERi0xLjQKJdPr6eE=    Examples (images, text files, etc.):  - Image:\tdata:image/gif;base64,R0lGODlhAQABAPAAAAAA/wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==  - HTML:\t\tdata:text/html,%3Ch1%3EHello%2C%20World%21%3C%2Fh1%3E  - Plain text:\tdata:,Hello%2C%20World%21    Feel free to download this page! Simply press Ctrl + S (or Cmd + S on Mac) and put this file in an easy-to-reach place such as the Desktop or the Start menu."></textarea>
 	</form>
